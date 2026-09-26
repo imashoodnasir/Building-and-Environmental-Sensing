@@ -1,0 +1,369 @@
+import numpy as np
+import pandas as pd
+from scipy.stats import shapiro, ttest_rel
+from statsmodels.stats.multitest import multipletests
+
+# ============================================================
+# Configuration
+# ============================================================
+
+INPUT_FILE = "table16_run_level_results.xlsx"
+OUTPUT_FILE = "table16_statistical_results.xlsx"
+
+N_BOOTSTRAP = 10000
+BOOTSTRAP_SEED = 42
+
+# Comparisons belonging to each multiple-testing family
+FAMILIES = {
+    "Forecasting baselines": [
+        "Proposed vs. LSTM",
+        "Proposed vs. Transformer",
+        "Proposed vs. Graph WaveNet",
+        "Proposed vs. Persistence",
+        "Proposed vs. STGCN",
+    ],
+
+    "Adaptation": [
+        "24 h adaptation vs. zero-shot",
+        "72 h adaptation vs. zero-shot",
+        "7 d adaptation vs. zero-shot",
+        "Continual vs. zero-shot",
+    ],
+
+    "Component ablation": [
+        "Full vs. no harmonization",
+        "Full vs. no masking",
+    ],
+}
+
+
+# ============================================================
+# Cohen's dz
+# ============================================================
+
+def cohens_dz(differences):
+    """
+    Paired Cohen's dz:
+
+        dz = mean(D) / SD(D)
+
+    where SD(D) is the sample standard deviation (ddof=1).
+    """
+    differences = np.asarray(differences, dtype=float)
+
+    mean_diff = np.mean(differences)
+    sd_diff = np.std(differences, ddof=1)
+
+    if sd_diff == 0:
+        return np.nan
+
+    return mean_diff / sd_diff
+
+
+# ============================================================
+# Bootstrap CI for Cohen's dz
+# ============================================================
+
+def bootstrap_dz_ci(
+    differences,
+    n_bootstrap=10000,
+    seed=42,
+    confidence=0.95
+):
+    """
+    Percentile bootstrap confidence interval for Cohen's dz.
+
+    The paired differences are resampled with replacement.
+    Cohen's dz is recomputed for every bootstrap sample.
+    """
+
+    differences = np.asarray(differences, dtype=float)
+
+    rng = np.random.default_rng(seed)
+
+    n = len(differences)
+
+    bootstrap_dz = []
+
+    for _ in range(n_bootstrap):
+
+        sample = rng.choice(
+            differences,
+            size=n,
+            replace=True
+        )
+
+        dz = cohens_dz(sample)
+
+        if np.isfinite(dz):
+            bootstrap_dz.append(dz)
+
+    bootstrap_dz = np.asarray(bootstrap_dz)
+
+    alpha = 1.0 - confidence
+
+    lower = np.percentile(
+        bootstrap_dz,
+        100 * alpha / 2
+    )
+
+    upper = np.percentile(
+        bootstrap_dz,
+        100 * (1 - alpha / 2)
+    )
+
+    return lower, upper
+
+
+# ============================================================
+# Load run-level results
+# ============================================================
+
+df = pd.read_excel(INPUT_FILE)
+
+required_columns = {
+    "Comparison",
+    "Seed",
+    "Proposed",
+    "Comparator"
+}
+
+missing = required_columns - set(df.columns)
+
+if missing:
+    raise ValueError(
+        f"Missing required columns: {sorted(missing)}"
+    )
+
+
+# ============================================================
+# Verify 20 matched seeds
+# ============================================================
+
+for comparison, group in df.groupby("Comparison"):
+
+    if len(group) != 20:
+        raise ValueError(
+            f"{comparison}: expected 20 runs, "
+            f"found {len(group)}."
+        )
+
+    if group["Seed"].nunique() != 20:
+        raise ValueError(
+            f"{comparison}: seeds are not unique."
+        )
+
+
+# ============================================================
+# Statistical analysis
+# ============================================================
+
+results = []
+
+for family, comparisons in FAMILIES.items():
+
+    family_results = []
+
+    for comparison in comparisons:
+
+        subset = (
+            df[df["Comparison"] == comparison]
+            .sort_values("Seed")
+            .copy()
+        )
+
+        if len(subset) != 20:
+            raise ValueError(
+                f"{comparison}: expected 20 paired runs, "
+                f"found {len(subset)}."
+            )
+
+        proposed = subset["Proposed"].to_numpy(dtype=float)
+        comparator = subset["Comparator"].to_numpy(dtype=float)
+
+        # Positive D means the comparator has larger error
+        # than the proposed/full/adapted configuration.
+        D = comparator - proposed
+
+        # ----------------------------------------------------
+        # Normality of paired differences
+        # ----------------------------------------------------
+
+        shapiro_stat, shapiro_p = shapiro(D)
+
+        # ----------------------------------------------------
+        # Two-sided paired t-test
+        # ----------------------------------------------------
+
+        test = ttest_rel(
+            comparator,
+            proposed,
+            alternative="two-sided"
+        )
+
+        p_value = test.pvalue
+
+        # ----------------------------------------------------
+        # Cohen's dz
+        # ----------------------------------------------------
+
+        dz = cohens_dz(D)
+
+        # ----------------------------------------------------
+        # Bootstrap CI
+        # ----------------------------------------------------
+
+        ci_low, ci_high = bootstrap_dz_ci(
+            D,
+            n_bootstrap=N_BOOTSTRAP,
+            seed=BOOTSTRAP_SEED,
+            confidence=0.95
+        )
+
+        family_results.append({
+            "Family": family,
+            "Comparison": comparison,
+            "n": len(D),
+            "Mean Difference": np.mean(D),
+            "SD Difference": np.std(D, ddof=1),
+            "Shapiro-Wilk W": shapiro_stat,
+            "Shapiro-Wilk p": shapiro_p,
+            "Paired t-test p": p_value,
+            "Cohen dz": dz,
+            "CI Lower": ci_low,
+            "CI Upper": ci_high
+        })
+
+    # --------------------------------------------------------
+    # Holm correction WITHIN this hypothesis family
+    # --------------------------------------------------------
+
+    raw_p = [
+        x["Paired t-test p"]
+        for x in family_results
+    ]
+
+    reject, p_adjusted, _, _ = multipletests(
+        raw_p,
+        alpha=0.05,
+        method="holm"
+    )
+
+    for result, adjusted, significant in zip(
+        family_results,
+        p_adjusted,
+        reject
+    ):
+        result["Holm p"] = adjusted
+        result["Significant"] = (
+            "Yes" if significant else "No"
+        )
+
+    results.extend(family_results)
+
+
+# ============================================================
+# Results dataframe
+# ============================================================
+
+results_df = pd.DataFrame(results)
+
+
+# ============================================================
+# Create manuscript Table 16
+# ============================================================
+
+table16 = results_df[
+    [
+        "Comparison",
+        "Paired t-test p",
+        "Holm p",
+        "Cohen dz",
+        "CI Lower",
+        "CI Upper",
+        "Significant"
+    ]
+].copy()
+
+
+table16["95% CI of dz"] = table16.apply(
+    lambda x:
+    f"[{x['CI Lower']:.3f}, {x['CI Upper']:.3f}]",
+    axis=1
+)
+
+
+table16 = table16[
+    [
+        "Comparison",
+        "Paired t-test p",
+        "Holm p",
+        "Cohen dz",
+        "95% CI of dz",
+        "Significant"
+    ]
+]
+
+
+# ============================================================
+# Formatting
+# ============================================================
+
+table16["Paired t-test p"] = (
+    table16["Paired t-test p"]
+    .map(lambda x: f"{x:.6g}")
+)
+
+table16["Holm p"] = (
+    table16["Holm p"]
+    .map(lambda x: f"{x:.6g}")
+)
+
+table16["Cohen dz"] = (
+    table16["Cohen dz"]
+    .map(lambda x: f"{x:.3f}")
+)
+
+
+# ============================================================
+# Save complete statistical output
+# ============================================================
+
+with pd.ExcelWriter(
+    OUTPUT_FILE,
+    engine="openpyxl"
+) as writer:
+
+    table16.to_excel(
+        writer,
+        sheet_name="Table16",
+        index=False
+    )
+
+    results_df.to_excel(
+        writer,
+        sheet_name="Full_Statistics",
+        index=False
+    )
+
+    df.to_excel(
+        writer,
+        sheet_name="Run_Level_Data",
+        index=False
+    )
+
+
+# ============================================================
+# Display Table 16
+# ============================================================
+
+print("\nTABLE 16")
+print("=" * 100)
+
+print(
+    table16.to_string(
+        index=False
+    )
+)
+
+print("\nSaved to:", OUTPUT_FILE)
