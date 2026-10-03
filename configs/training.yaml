@@ -1,0 +1,49 @@
+training:
+  optimizer: null
+  learning_rate: null
+  weight_decay: null
+  batch_size: null
+  max_epochs: null
+  gradient_clipping: null
+  seeded_runs:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+validation:
+  metric: normalized_MAE
+  mode: min
+  test_set_access: false
+early_stopping:
+  enabled: true
+  monitor: validation_normalized_MAE
+  patience: null
+  minimum_delta: null
+  restore_best_weights: true
+checkpointing:
+  enabled: true
+  save_best_only: true
+  separate_checkpoint_per_seed: true
+reproducibility:
+  deterministic_algorithms: true
+  save_seed: true
+  save_configuration: true
+  save_predictions: true
+  save_targets: true
+  save_metrics: true

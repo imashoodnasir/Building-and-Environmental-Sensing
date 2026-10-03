@@ -1,0 +1,232 @@
+experiment:
+  name: historical_to_live_building_environmental_forecasting
+  version: '1.0'
+  description: Causal historical-to-live multimodal forecasting from BDG2 to openSenseMap.
+  seeds:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  number_of_runs: 20
+domains:
+  source:
+    dataset: BDG2
+    role: historical
+    temporal_access: historical_only
+  target:
+    dataset: openSenseMap
+    role: live
+    temporal_access: causal_only
+variables:
+  shared:
+  - temperature
+  - relative_humidity
+  - pressure
+  source_private:
+  - energy
+  target_private:
+  - pm25
+  abbreviations:
+    temperature: T
+    relative_humidity: RH
+    pressure: P
+    energy: E
+    pm25: PM2.5
+forecasting:
+  temporal_resolution: 1h
+  horizons_hours:
+  - 1
+  - 3
+  - 6
+  - 12
+  - 24
+  multi_horizon: true
+evaluation:
+  repeated_runs: 20
+  report:
+    mean: true
+    standard_deviation: true
+  aggregate_error_space: normalized
+  metrics:
+  - MAE
+  - RMSE
+  - sMAPE
+  - R2
+  - NLL
+  - PICP
+causality:
+  enabled: true
+  allow_future_target_observations: false
+  chronological_target_processing: true
+  target_label_requires_horizon_maturity: true
+  target_normalization:
+    future_statistics_allowed: false
+  target_imputation:
+    future_observations_allowed: false
+  target_graph:
+    future_observations_allowed: false
+  model_selection:
+    target_test_allowed: false
+  adaptation:
+    future_labels_allowed: false
+  calibration:
+    future_target_allowed: false
+entity_correspondence:
+  source_target_entity_matching: false
+  source_graph: independent
+  target_graph: independent
+normalization:
+  shared_variables:
+    method: zscore
+    statistics_from: source_training_only
+  source_private:
+    energy:
+      transform: log1p
+      normalization: zscore
+      statistics_from: source_training_only
+  target_private:
+    pm25:
+      transform: log1p
+      normalization: causal_zscore
+      future_statistics_allowed: false
+  aggregate_metrics:
+    MAE: normalized_space
+    RMSE: normalized_space
+  physical_unit_metrics:
+    aggregate_across_targets: false
+missing_data:
+  preserve_availability_mask: true
+  causal_imputation: true
+  future_values_allowed: false
+  short_gap_strategy: interpolation
+  short_gap_max_hours: null
+  long_gap_strategy: mask
+  modality_masking: true
+splits:
+  strategy: chronological
+  shuffle_before_split: false
+  source:
+    train: chronological
+    validation: chronological
+    test: chronological
+  target:
+    deployment_stream: chronological
+    random_sampling: false
+  leakage:
+    future_to_past: false
+    target_test_for_model_selection: false
+target_supervision:
+  history:
+  - 0h
+  - 6h
+  - 12h
+  - 24h
+  - 3d
+  - 7d
+  fractions:
+  - 0.01
+  - 0.02
+  - 0.05
+  - 0.1
+  - 0.25
+  - 0.5
+  fraction_selection: chronological_prefix
+  random_fraction_sampling: false
+  require_label_maturity: true
+target_private_learning:
+  variable: pm25
+  activation:
+    causal_only: true
+    minimum_labels_required: true
+  stages:
+  - N_min_PM
+  - plus_24h
+  - plus_72h
+  - plus_7d
+  - continual
+  initialization_controls:
+  - random_private
+  - source_private
+  - random_shared_alignment
+  - transferred_no_separation
+  - transferred_full_objective
+  transfer:
+    source_private_encoder: true
+    source_energy_prediction_head: false
+    target_pm25_prediction_head: random_initialization
+shift_detection:
+  statistic: MMD
+  representation_score: delta_r_squared
+  threshold:
+    calibration_source: unperturbed_validation_windows
+    use_test_perturbations: false
+    rule: empirical_percentile
+    percentile: 95
+    fixed_value: null
+  perturbations:
+  - missing_modality
+  - timestamp_jitter
+  - sampling_frequency_shift
+  - station_dropout
+  - simultaneous_sensor_failure
+  adaptation_requires:
+    detected_shift: true
+    matured_target_labels: true
+uncertainty:
+  distribution: heteroscedastic_gaussian
+  prediction_interval:
+    type: gaussian_model_based
+    nominal_coverage: 0.95
+    multiplier: 1.96
+    conformal: false
+    distribution_free_guarantee: false
+  selective_forecasting:
+    ranking_space: normalized
+    use_raw_physical_sigma: false
+    coverage:
+    - 1.0
+    - 0.95
+    - 0.9
+    - 0.8
+    - 0.7
+    - 0.6
+    - 0.5
+statistics:
+  paired_runs: true
+  n: 20
+  paired_test: paired_t_test
+  alternative: two_sided
+  assumption_check:
+    normality:
+      test: shapiro_wilk
+      applied_to: paired_differences
+      alpha: 0.05
+  multiple_testing:
+    correction: holm
+    scope: within_hypothesis_family
+  effect_size:
+    type: cohens_dz
+    formula: mean_difference_over_sample_sd_difference
+  bootstrap:
+    enabled: true
+    resamples: 10000
+    method: percentile
+    confidence_level: 0.95
+    seed: 42
+    resampling_unit: paired_difference

@@ -1,0 +1,116 @@
+# ============================================================
+# Building-and-Environmental-Sensing
+# Keep source code; exclude data, models and experimental output
+# ============================================================
+
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# Python tooling / caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# ----------------------------
+# IDE / OS
+# ----------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----------------------------
+# DATA - DO NOT UPLOAD
+# ----------------------------
+data/
+datasets/
+raw_data/
+processed_data/
+
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# ----------------------------
+# TRAINED MODELS / CHECKPOINTS
+# ----------------------------
+models/
+checkpoints/
+weights/
+
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ----------------------------
+# EXPERIMENTAL RESULTS
+# ----------------------------
+results/
+outputs/
+output/
+logs/
+runs/
+experiments/
+
+final_result_tables/
+
+# Result spreadsheets
+Table*_20_Run.xlsx
+Table*_20_Run_UPDATED.xlsx
+
+# ----------------------------
+# GENERATED METRICS / PREDICTIONS
+# ----------------------------
+*predictions*.csv
+*metrics*.csv
+*history*.csv
+*audit*.csv
+*summary*.csv
+
+# ----------------------------
+# GENERATED MANIFESTS / LOGS
+# ----------------------------
+*.log
+
+# ----------------------------
+# TEMPORARY FILES
+# ----------------------------
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+~$*
+
+# ----------------------------
+# Secrets / local configuration
+# ----------------------------
+.env
+.env.*
+*.key
+*.pem
+credentials.json
+secrets.json

@@ -1,0 +1,37 @@
+model:
+  name: proposed_shared_private_forecaster
+components:
+  modality_specific_encoders: true
+  temporal_encoder: true
+  spatial_graph: true
+  learned_dynamic_graph: true
+  shared_private_decomposition: true
+  domain_alignment: true
+  uncertainty_head: true
+outputs:
+  shared:
+  - temperature
+  - relative_humidity
+  - pressure
+  source_private:
+  - energy
+  target_private:
+  - pm25
+architecture:
+  hidden_dimension: null
+  temporal_layers: null
+  graph_layers: null
+  dropout: null
+  attention_heads: null
+losses:
+  forecasting: true
+  alignment: true
+  separation: true
+  replay: true
+  uncertainty: true
+  weights:
+    forecasting: null
+    alignment: null
+    separation: null
+    replay: null
+    uncertainty: null

@@ -1,0 +1,36 @@
+adaptation:
+  mode: causal_online
+  future_target_access: false
+  chronological_processing: true
+  require_matured_labels: true
+  update_frequency: null
+  learning_rate: null
+  gradient_steps: null
+target_history:
+- 0h
+- 6h
+- 12h
+- 24h
+- 3d
+- 7d
+target_data_fractions:
+- 0.01
+- 0.02
+- 0.05
+- 0.1
+- 0.25
+- 0.5
+fraction_strategy: chronological_prefix
+target_only_controls:
+- 24h
+- 72h
+- 7d
+continual_learning:
+  replay: true
+  alignment_regularization: true
+  ewc_control: true
+private_target:
+  variable: pm25
+  transfer_encoder_only: true
+  transfer_energy_head: false
+  new_prediction_head: true
